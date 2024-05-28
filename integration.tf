@@ -119,7 +119,7 @@ resource "gitlab_integration_pipelines_email" "this" {
 resource "gitlab_integration_slack" "this" {
   count = var.integration_slack != null ? 1 : 0
 
-  project                      = coalesce(local._projects[var.integration_slack.project].id, one(gitlab_project.this[*].id))
+  project                      = var.integration_slack.project != null ? coalesce(local._projects[var.integration_slack.project].id, one(gitlab_project.this[*].id)) : var.integration_slack.project_id
   webhook                      = var.integration_slack.webhook
   branches_to_be_notified      = var.integration_slack.branches_to_be_notified
   confidential_issue_channel   = var.integration_slack.confidential_issue_channel

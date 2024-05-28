@@ -1,9 +1,10 @@
-data "gitlab_groups" "this" {
-}
+data "gitlab_groups" "this" {}
 
 data "gitlab_users" "this" {
   active = true
 }
+
+data "gitlab_current_user" "this" {}
 
 locals {
   exists_users  = { for user in data.gitlab_users.this.users : user.username => user }
@@ -11,7 +12,7 @@ locals {
 }
 
 resource "gitlab_project" "this" {
-  count = var.project != null && length(keys(var.project)) > 0 ? 1 : 0
+  count = var.project != null ? 1 : 0
 
   name                                   = var.project.name
   allow_merge_on_skipped_pipeline        = var.project.allow_merge_on_skipped_pipeline
@@ -147,7 +148,21 @@ locals {
   _projects = { for project in data.gitlab_projects.this.projects : project.name => project }
 }
 
-resource "gitlab_project_access_token" "this" {
+resource "gitlab_project_access_token" "access_token" {
+  count = var.access_token != null ? 1 : 0
+
+  project      = coalesce(local._projects[var.access_token.project].id, var.access_token.project)
+  name         = var.access_token.name
+  scopes       = var.access_token.scopes
+  access_level = var.access_token.access_level
+  expires_at   = var.access_token.expires_at
+  rotation_configuration = var.access_token.rotation_configuration != null ? {
+    expiration_days    = try(var.access_token.rotation_configuration.expiration_days, null)
+    rotate_before_days = try(var.access_token.rotation_configuration.rotate_before_days, null)
+  } : null
+}
+
+resource "gitlab_project_access_token" "access_tokens" {
   for_each = {
     for token in var.access_tokens : token.name => token
     if length(var.access_tokens) > 0
@@ -165,7 +180,21 @@ resource "gitlab_project_access_token" "this" {
 }
 
 
-resource "gitlab_project_approval_rule" "this" {
+resource "gitlab_project_approval_rule" "approval_rule" {
+  count = var.approval_rule != null && contains(["premium", "ultimate"], lower(var.tier)) ? 1 : 0
+
+  project                                               = coalesce(local._projects[var.approval_rule.project].id, var.approval_rule.project_id)
+  name                                                  = var.approval_rule.name
+  approvals_required                                    = var.approval_rule.approvals_required
+  applies_to_all_protected_branches                     = var.approval_rule.applies_to_all_protected_branches
+  disable_importing_default_any_approver_rule_on_create = var.approval_rule.disable_importing_default_any_approver_rule_on_create
+  user_ids                                              = length(var.approval_rule.user_ids) > 0 ? [for user in var.approval_rule.user_ids : local.exists_users[user].id] : null
+  group_ids                                             = length(var.approval_rule.group_ids) > 0 ? [for group in var.approval_rule.group_ids : local.exists_groups[group].group_id] : null
+  // protected_branch_ids                               = length(var.approval_rule.protected_branch_ids) > 0 ? [for branch in var.approval_rule.protected_branch_ids : local.project_branches[branch].id ] : null
+  rule_type = var.approval_rule.rule_type
+}
+
+resource "gitlab_project_approval_rule" "approval_rules" {
   for_each = {
     for rule in var.approval_rules : rule.name => rule
     if length(var.approval_rules) > 0 && contains(["premium", "ultimate"], lower(var.tier))
@@ -182,7 +211,16 @@ resource "gitlab_project_approval_rule" "this" {
   rule_type = each.value.rule_type
 }
 
-resource "gitlab_project_badge" "this" {
+resource "gitlab_project_badge" "badge" {
+  count = var.badge != null ? 1 : 0
+
+  project   = coalesce(local._projects[var.badge.project].id, var.badge.project_id)
+  link_url  = var.badge.link_url
+  image_url = var.badge.image_url
+  name      = var.badge.name
+}
+
+resource "gitlab_project_badge" "badges" {
   for_each = {
     for badge in var.badges : badge.link_url => badge
     if length(var.badges) > 0
@@ -194,8 +232,15 @@ resource "gitlab_project_badge" "this" {
   name      = each.value.name
 }
 
+resource "gitlab_project_custom_attribute" "custom_attribute" {
+  count = var.custom_attribute != null ? 1 : 0
 
-resource "gitlab_project_custom_attribute" "this" {
+  project = coalesce(local._projects[var.custom_attribute.project].id, var.custom_attribute.project_id)
+  key     = var.custom_attribute.key
+  value   = var.custom_attribute.value
+}
+
+resource "gitlab_project_custom_attribute" "custom_attributes" {
   for_each = {
     for attr in var.custom_attributes : attr.key => attr
     if length(var.custom_attributes) > 0
@@ -206,8 +251,16 @@ resource "gitlab_project_custom_attribute" "this" {
   value   = each.value.value
 }
 
+resource "gitlab_project_environment" "environment" {
+  count = var.environment != null ? 1 : 0
 
-resource "gitlab_project_environment" "this" {
+  project             = coalesce(local._projects[var.environment.project].id, var.environment.project_id)
+  name                = var.environment.name
+  external_url        = var.environment.external_url
+  stop_before_destroy = var.environment.stop_before_destroy
+}
+
+resource "gitlab_project_environment" "environments" {
   for_each = {
     for env in var.environments : env.name => env
     if length(var.environments) > 0
@@ -228,7 +281,30 @@ resource "gitlab_project_freeze_period" "this" {
   cron_timezone = var.freeze_period.cron_timezone
 }
 
-resource "gitlab_project_hook" "this" {
+resource "gitlab_project_hook" "hook" {
+  count = var.hook != null ? 1 : 0
+
+  project                    = coalesce(local._projects[var.hook.project].id, var.hook.project, one(gitlab_project.this[*].id))
+  url                        = var.hook.url
+  confidential_issues_events = var.hook.confidential_issues_events // can(tobool(each.value.confidential_issues_events)) ? each.value.confidential_issues_events : false
+  confidential_note_events   = var.hook.confidential_note_events   // can(tobool(each.value.confidential_note_events)) ? each.value.confidential_note_events : false
+  custom_webhook_template    = var.hook.custom_webhook_template    // can(tobool(each.value.custom_webhook_template)) ? each.value.custom_webhook_template : false
+  deployment_events          = var.hook.deployment_events          // can(tobool(each.value.deployment_events)) ? each.value.deployment_events : false
+  enable_ssl_verification    = var.hook.enable_ssl_verification    // can(tobool(each.value.enable_ssl_verification)) ? each.value.enable_ssl_verification : false
+  issues_events              = var.hook.issues_events              // can(tobool(each.value.issues_events)) ? each.value.issues_events : false
+  job_events                 = var.hook.job_events                 // can(tobool(each.value.job_events)) ? each.value.job_events : false
+  merge_requests_events      = var.hook.merge_requests_events      // can(tobool(each.value.merge_requests_events)) ? each.value.merge_requests_events : false
+  note_events                = var.hook.note_events                // can(tobool(each.value.note_events)) ? each.value.note_events : false
+  pipeline_events            = var.hook.pipeline_events            // can(tobool(each.value.pipeline_events)) ? each.value.pipeline_events : false
+  push_events                = var.hook.push_events                // can(tobool(each.value.push_events)) ? each.value.push_events : false
+  push_events_branch_filter  = var.hook.push_events_branch_filter  // can(tobool(each.value.push_events_branch_filter)) ? each.value.push_events_branch_filter : false
+  releases_events            = var.hook.releases_events            // can(tobool(each.value.releases_events)) ? each.value.releases_events : false
+  tag_push_events            = var.hook.tag_push_events            // can(tobool(each.value.tag_push_events)) ? each.value.tag_push_events : false
+  token                      = var.hook.token                      // each.value.token
+  wiki_page_events           = var.hook.wiki_page_events           // can(tobool(each.value.wiki_page_events)) ? each.value.wiki_page_events : false
+}
+
+resource "gitlab_project_hook" "hooks" {
   for_each = {
     for hook in var.hooks : hook.url => hook
     if length(var.hooks) > 0 && contains(["premium", "ultimate"], lower(var.tier))
@@ -254,8 +330,31 @@ resource "gitlab_project_hook" "this" {
   wiki_page_events           = each.value.wiki_page_events           // can(tobool(each.value.wiki_page_events)) ? each.value.wiki_page_events : false
 }
 
+resource "gitlab_project_issue" "issue" {
+  count = var.issue != null ? 1 : 0
 
-resource "gitlab_project_issue" "this" {
+  project                                 = coalesce(local._projects[var.issue.project].id, one(gitlab_project.this[*].id), var.issue.project)
+  title                                   = var.issue.title
+  assignee_ids                            = var.issue.assignee_ids
+  confidential                            = var.issue.confidential
+  created_at                              = var.issue.created_at
+  delete_on_destroy                       = var.issue.delete_on_destroy
+  description                             = "Welcome to the ${var.issue.project} project!"
+  discussion_locked                       = var.issue.discussion_locked // true
+  discussion_to_resolve                   = var.issue.discussion_to_resolve
+  due_date                                = var.issue.due_date
+  epic_issue_id                           = var.issue.epic_issue_id
+  iid                                     = var.issue.iid
+  issue_type                              = var.issue.issue_type
+  labels                                  = var.issue.labels
+  merge_request_to_resolve_discussions_of = var.issue.merge_request_to_resolve_discussions_of
+  milestone_id                            = var.issue.milestone_id
+  state                                   = var.issue.state
+  updated_at                              = var.issue.updated_at
+  weight                                  = var.issue.weight
+}
+
+resource "gitlab_project_issue" "issues" {
   for_each = {
     for issue in var.issues : issue.title => issue
     if length(var.issues) > 0
@@ -284,7 +383,28 @@ resource "gitlab_project_issue" "this" {
   weight                                  = each.value.weight
 }
 
-resource "gitlab_project_issue_board" "this" {
+resource "gitlab_project_issue_board" "board" {
+  count = var.issue_board != null ? 1 : 0
+
+  name        = var.issue_board.name
+  project     = coalesce(local._projects[var.issue_board.project].id, one(gitlab_project.this[*].id), var.issue_board.project)
+  assignee_id = var.issue_board.assignee_id
+  labels      = var.issue_board.labels
+  dynamic "lists" {
+    for_each = length(var.issue_board.lists) > 0 ? toset(var.issue_board.lists) : []
+    iterator = item
+    content {
+      assignee_id  = try(item.value.assignee_id, null)
+      iteration_id = try(item.value.iteration_id, null)
+      label_id     = try(item.value.label_id, null) != null ? coalesce(gitlab_project_label.labels[try(item.value.label_id, null)].label_id, one(gitlab_project_label.label[*].label_id)) : null
+      milestone_id = try(item.value.milestone_id, null) != null ? coalesce(gitlab_project_milestone.milestones[item.value.milestone_id].milestone_id, one(gitlab_project_milestone.milestone[*].milestone_id)) : null
+    }
+  }
+  milestone_id = var.issue_board.milestone_id != null ? coalesce(gitlab_project_milestone.milestones[var.issue_board.milestone_id].milestone_id, one(gitlab_project_milestone.milestone[*].milestone_id)) : null
+  weight       = var.issue_board.weight
+}
+
+resource "gitlab_project_issue_board" "boards" {
   for_each = {
     for board in var.issue_boards : board.name => board
     if length(var.issue_boards) > 0
@@ -300,15 +420,22 @@ resource "gitlab_project_issue_board" "this" {
     content {
       assignee_id  = try(item.value.assignee_id, null)
       iteration_id = try(item.value.iteration_id, null)
-      label_id     = try(item.value.label_id, null) != null ? gitlab_project_label.this[try(item.value.label_id, null)].label_id : null
-      milestone_id = try(item.value.milestone_id, null) != null ? gitlab_project_milestone.this[item.value.milestone_id].milestone_id : null
+      label_id     = try(item.value.label_id, null) != null ? coalesce(gitlab_project_label.labels[try(item.value.label_id, null)].label_id, one(gitlab_project_label.label[*].label_id)) : null
+      milestone_id = try(item.value.milestone_id, null) != null ? coalesce(gitlab_project_milestone.milestones[item.value.milestone_id].milestone_id, one(gitlab_project_milestone.milestone[*].milestone_id)) : null
     }
   }
-  milestone_id = each.value.milestone_id != null ? gitlab_project_milestone.this[each.value.milestone_id].milestone_id : null
+  milestone_id = each.value.milestone_id != null ? coalesce(gitlab_project_milestone.milestones[each.value.milestone_id].milestone_id, one(gitlab_project_milestone.milestone[*].milestone_id)) : null
   weight       = each.value.weight
 }
 
-resource "gitlab_project_job_token_scope" "this" {
+resource "gitlab_project_job_token_scope" "scope" {
+  count = var.job_token_scope != null ? 1 : 0
+
+  project           = coalesce(local._projects[var.job_token_scope.project].id, one(gitlab_project.this[*].id), var.job_token_scope.project)
+  target_project_id = local.exists_projects[var.job_token_scope.target_project_id].id
+}
+
+resource "gitlab_project_job_token_scope" "scopes" {
   for_each = {
     for scope in var.job_token_scopes : scope.target_project_id => scope
     if length(var.job_token_scopes) > 0
@@ -319,7 +446,16 @@ resource "gitlab_project_job_token_scope" "this" {
 }
 
 
-resource "gitlab_project_label" "this" {
+resource "gitlab_project_label" "label" {
+  count = var.label != null ? 1 : 0
+
+  project     = coalesce(local._projects[var.label.project].id, one(gitlab_project.this[*].id), var.label.project)
+  name        = var.label.name
+  description = var.label.description
+  color       = var.label.color
+}
+
+resource "gitlab_project_label" "labels" {
   for_each = {
     for label in var.labels : label.name => label
     if length(var.labels) > 0
@@ -376,10 +512,19 @@ resource "gitlab_project_level_mr_approvals" "this" {
 // }
 
 
-resource "gitlab_project_membership" "this" {
+resource "gitlab_project_membership" "membership" {
+  count = var.membership != null ? 1 : 0
+
+  project      = coalesce(local._projects[var.membership.project].id, one(gitlab_project.this[*].id), var.membership.project)
+  user_id      = contains(keys(local.exists_users), var.membership.user_id) ? local.exists_users[var.membership.user_id].id : null
+  access_level = var.membership.access_level
+  expires_at   = var.membership.expires_at
+}
+
+resource "gitlab_project_membership" "memberships" {
   for_each = {
-    for member in var.membership : member.user_id => member
-    if length(var.membership) > 0
+    for member in var.memberships : member.user_id => member
+    if length(var.memberships) > 0
   }
 
   project      = coalesce(local._projects[each.value.project].id, one(gitlab_project.this[*].id))
@@ -388,8 +533,18 @@ resource "gitlab_project_membership" "this" {
   expires_at   = each.value.expires_at
 }
 
+resource "gitlab_project_milestone" "milestone" {
+  count = var.milestone != null ? 1 : 0
 
-resource "gitlab_project_milestone" "this" {
+  project     = coalesce(local._projects[var.milestone.project].id, one(gitlab_project.this[*].id), var.milestone.project)
+  title       = var.milestone.title
+  description = var.milestone.description
+  due_date    = var.milestone.due_date
+  start_date  = var.milestone.start_date
+  state       = var.milestone.state
+}
+
+resource "gitlab_project_milestone" "milestones" {
   for_each = {
     for milestone in var.milestones : milestone.title => milestone
     if length(var.milestones) > 0
@@ -415,7 +570,26 @@ resource "gitlab_project_mirror" "this" {
 }
 
 
-resource "gitlab_project_protected_environment" "this" {
+resource "gitlab_project_protected_environment" "environment" {
+  count = var.protected_environment != null && contains(["premium", "ultimate"], lower(var.tier)) ? 1 : 0
+
+  environment = var.protected_environment.environment
+  project     = coalesce(local._projects[var.protected_environment.project].id, one(gitlab_project.this[*].id), var.protected_environment.project)
+  dynamic "deploy_access_levels" {
+    for_each = length(try(var.protected_environment.deploy_access_levels, [])) > 0 ? var.protected_environment.deploy_access_levels : []
+    iterator = lvl
+    content {
+      access_level           = try(lvl.value.access_level, null)
+      group_id               = try(lvl.group_id, null)
+      group_inheritance_type = try(lvl.group_inheritance_type, null)
+      user_id                = try(lvl.user_id, null)
+    }
+  }
+  approval_rules          = var.protected_environment.approval_rules
+  required_approval_count = var.protected_environment.required_approval_count
+}
+
+resource "gitlab_project_protected_environment" "environments" {
   for_each = {
     for env in var.protected_environments : env.environment => env
     if length(var.protected_environments) > 0 && contains(["premium", "ultimate"], lower(var.tier))
@@ -437,8 +611,14 @@ resource "gitlab_project_protected_environment" "this" {
   required_approval_count = each.value.required_approval_count
 }
 
+resource "gitlab_project_runner_enablement" "runner" {
+  count = var.runner != null ? 1 : 0
 
-resource "gitlab_project_runner_enablement" "this" {
+  project   = coalesce(local._projects[var.runner.project].id, one(gitlab_project.this[*].id), var.runner.project)
+  runner_id = var.runner.runner_id
+}
+
+resource "gitlab_project_runner_enablement" "runners" {
   for_each = {
     for p in var.runners : p.runner_id => p
     if length(var.runners) > 0
@@ -448,8 +628,15 @@ resource "gitlab_project_runner_enablement" "this" {
   runner_id = each.value.runner_id
 }
 
+resource "gitlab_project_share_group" "group" {
+  count = var.share_group != null ? 1 : 0
 
-resource "gitlab_project_share_group" "this" {
+  project      = coalesce(local._projects[var.share_group.project].id, one(gitlab_project.this[*].id))
+  group_id     = coalesce(local.exists_groups[var.share_group.group_id].group_id, var.share_group.group_id)
+  group_access = var.share_group.group_access
+}
+
+resource "gitlab_project_share_group" "groups" {
   for_each = {
     for group in var.share_groups : group.group_id => group
     if length(var.share_groups) > 0
@@ -460,88 +647,27 @@ resource "gitlab_project_share_group" "this" {
   group_access = each.value.group_access
 }
 
+resource "gitlab_project_variable" "variable" {
+  count = var.variable != null ? 1 : 0
 
-data "gitlab_project_branches" "this" {
-  for_each = {
-    for tag in var.tags : tag.name => tag
-    if length(var.tags) > 0
-  }
-
-  project = tostring(coalesce(local._projects[each.value.project].id, one(gitlab_project.this[*].id)))
+  project           = coalesce(try(local._projects[var.variable.project].id, var.variable.project_id), one(gitlab_project.this[*].id))
+  key               = var.variable.key
+  value             = var.variable.value
+  protected         = var.variable.protected
+  masked            = var.variable.masked
+  environment_scope = var.variable.environment_scope
+  description       = var.variable.description
+  raw               = var.variable.raw
+  variable_type     = var.variable.variable_type
 }
 
-locals {
-  _project_branches = {
-    for branch in distinct(flatten(values(data.gitlab_project_branches.this)[*].branches)) : branch.name => branch
-  }
-}
-
-resource "gitlab_project_tag" "this" {
-  for_each = {
-    for tag in var.tags : tag.name => tag
-    if length(var.tags) > 0
-  }
-
-  project = tostring(coalesce(local._projects[each.value.project].id, one(gitlab_project.this[*].id)))
-  name    = each.value.name
-  ref     = local._project_branches[each.value.ref].name // each.value.ref
-  message = each.value.message
-}
-
-data "gitlab_project_tags" "this" {
-  for_each = {
-    for tag in var.tags : tag.name => tag
-    if length(var.tags) > 0 && tag.protected == true
-  }
-
-  project = tostring(coalesce(local._projects[each.value.project].id, one(gitlab_project.this[*].id)))
-
-  depends_on = [
-    gitlab_project_tag.this
-  ]
-}
-
-locals {
-  _gitlab_project_tags = {
-    for tag in distinct(flatten(values(data.gitlab_project_tags.this)[*].tags)) : tag.name => tag
-  }
-}
-
-resource "gitlab_tag_protection" "this" {
-  for_each = {
-    for tag in var.tags : tag.name => tag
-    if length(var.tags) > 0 && tag.protected == true
-  }
-
-  project             = tostring(coalesce(local._projects[each.value.project].id, one(gitlab_project.this[*].id)))
-  tag                 = coalesce(try(local._gitlab_project_tags[each.value.name].name, null), gitlab_project_tag.this[each.value.name].id)
-  create_access_level = each.value.create_access_level
-  dynamic "allowed_to_create" {
-    for_each = length(each.value.allowed_to_create) > 0 && contains(["premium", "ultimate"], lower(var.tier)) ? toset(each.value.allowed_to_create) : []
-    iterator = item
-    content {
-      user_id  = item.value.user_id != null ? local.exists_users[item.value.user_id].id : null
-      group_id = item.value.group_id != null ? local.exists_groups[item.value.group_id].group_id : null
-    }
-  }
-
-  lifecycle {
-    create_before_destroy = true
-  }
-
-  depends_on = [
-    gitlab_project_tag.this
-  ]
-}
-
-
-resource "gitlab_project_variable" "this" {
+resource "gitlab_project_variable" "variables" {
   for_each = {
     for v in var.variables : v.key => v
     if length(var.variables) > 0
   }
 
-  project           = coalesce(local._projects[each.value.project].id, one(gitlab_project.this[*].id))
+  project           = coalesce(try(local._projects[each.value.project].id, each.value.project_id), one(gitlab_project.this[*].id))
   key               = each.value.key
   value             = each.value.value
   protected         = each.value.protected
@@ -552,8 +678,16 @@ resource "gitlab_project_variable" "this" {
   variable_type     = each.value.variable_type
 }
 
+resource "gitlab_deploy_key" "key" {
+  count = var.deploy_key != null ? 1 : 0
 
-resource "gitlab_deploy_key" "this" {
+  project  = coalesce(local._projects[var.deploy_key.project].id, one(gitlab_project.this[*].id), var.deploy_key.project)
+  title    = var.deploy_key.title
+  key      = var.deploy_key.key
+  can_push = var.deploy_key.can_push
+}
+
+resource "gitlab_deploy_key" "keys" {
   for_each = {
     for key in var.deploy_keys : key.title => key
     if length(var.deploy_keys) > 0
@@ -565,8 +699,17 @@ resource "gitlab_deploy_key" "this" {
   can_push = each.value.can_push
 }
 
+resource "gitlab_deploy_token" "token" {
+  count = var.deploy_token != null ? 1 : 0
 
-resource "gitlab_deploy_token" "this" {
+  project    = coalesce(local._projects[var.deploy_token.project].id, one(gitlab_project.this[*].id), var.deploy_token.project)
+  name       = var.deploy_token.name
+  scopes     = var.deploy_token.scopes
+  expires_at = var.deploy_token.expires_at
+  username   = var.deploy_token.username
+}
+
+resource "gitlab_deploy_token" "tokens" {
   for_each = {
     for token in var.deploy_tokens : token.name => token
     if length(var.deploy_tokens) > 0
@@ -591,10 +734,22 @@ resource "gitlab_pages_domain" "this" {
   expired          = var.pages_domain.expired
 }
 
-resource "gitlab_pipeline_schedule" "this" {
+resource "gitlab_pipeline_schedule" "schedule" {
+  count = var.pipeline_schedule != null ? 1 : 0
+
+  project        = coalesce(local._projects[var.pipeline_schedule.project].id, one(gitlab_project.this[*].id), var.pipeline_schedule.project)
+  description    = var.pipeline_schedule.description
+  ref            = var.pipeline_schedule.ref
+  cron           = var.pipeline_schedule.cron
+  active         = try(var.pipeline_schedule.active, null)
+  cron_timezone  = try(var.pipeline_schedule.cron_timezone, null)
+  take_ownership = try(var.pipeline_schedule.take_ownership, null)
+}
+
+resource "gitlab_pipeline_schedule" "schedules" {
   for_each = {
-    for pipeline in var.pipeline_schedule : pipeline.ref => pipeline
-    if length(var.pipeline_schedule) > 0
+    for pipeline in var.pipeline_schedules : pipeline.ref => pipeline
+    if length(var.pipeline_schedules) > 0
   }
 
   project        = coalesce(local._projects[each.value.project].id, one(gitlab_project.this[*].id))
@@ -606,26 +761,33 @@ resource "gitlab_pipeline_schedule" "this" {
   take_ownership = try(each.value.take_ownership, null)
 }
 
-resource "gitlab_pipeline_schedule_variable" "this" {
-  for_each = {
-    for p in [for ps in var.pipeline_schedule : [
-      for v in var.pipeline_schedule.variables : merge({
-        key     = v.key,
-        value   = v.value,
-        ref     = ps.ref,
-        project = coalesce(local._projects[v.project].id, one(gitlab_project.this[*].id))
-      }) if length(try(var.pipeline_schedule.variables, [])) > 0
-    ] if length(try(var.pipeline_schedule.variables, [])) > 0] : format("%s-%s", p.project, p.ref) => p
-    if length(var.pipeline_schedule) > 0
-  }
+// resource "gitlab_pipeline_schedule_variable" "this" {
+//   for_each = {
+//     for p in [for ps in var.pipeline_schedule : [
+//       for v in var.pipeline_schedule.variables : merge({
+//         key     = v.key,
+//         value   = v.value,
+//         ref     = ps.ref,
+//         project = coalesce(local._projects[v.project].id, one(gitlab_project.this[*].id))
+//       }) if length(try(var.pipeline_schedule.variables, [])) > 0
+//     ] if length(try(var.pipeline_schedule.variables, [])) > 0] : format("%s-%s", p.project, p.ref) => p
+//     if length(var.pipeline_schedule) > 0
+//   }
+// 
+//   project              = coalesce(local._projects[each.value.project].id, one(gitlab_project.this[*].id))
+//   pipeline_schedule_id = gitlab_pipeline_schedule.this[each.value.ref].pipeline_schedule_id
+//   key                  = each.value.key
+//   value                = each.value.value
+// }
 
-  project              = coalesce(local._projects[each.value.project].id, one(gitlab_project.this[*].id))
-  pipeline_schedule_id = gitlab_pipeline_schedule.this[each.value.ref].pipeline_schedule_id
-  key                  = each.value.key
-  value                = each.value.value
+resource "gitlab_pipeline_trigger" "trigger" {
+  count = var.pipeline_trigger != null ? 1 : 0
+
+  project     = tostring(coalesce(local._projects[var.pipeline_trigger.project].id, one(gitlab_project.this[*].id), var.pipeline_trigger.project))
+  description = var.pipeline_trigger.description
 }
 
-resource "gitlab_pipeline_trigger" "this" {
+resource "gitlab_pipeline_trigger" "triggers" {
   for_each = {
     for trigger in var.pipeline_triggers : trigger.description => trigger
     if length(var.pipeline_triggers) > 0
@@ -635,7 +797,18 @@ resource "gitlab_pipeline_trigger" "this" {
   description = each.value.description
 }
 
-resource "gitlab_release_link" "this" {
+resource "gitlab_release_link" "link" {
+  count = var.release_link != null ? 1 : 0
+
+  project   = tostring(coalesce(local._projects[var.release_link.project].id, one(gitlab_project.this[*].id), var.release_link.project))
+  tag_name  = var.release_link.tag_name
+  name      = var.release_link.name
+  url       = var.release_link.url
+  filepath  = var.release_link.filepath
+  link_type = var.release_link.link_type
+}
+
+resource "gitlab_release_link" "links" {
   for_each = {
     for release in var.release_links : release.name => release
     if length(var.release_links) > 0
@@ -649,8 +822,15 @@ resource "gitlab_release_link" "this" {
   link_type = each.value.link_type
 }
 
+resource "gitlab_branch" "branch" {
+  count = var.branch != null ? 1 : 0
 
-resource "gitlab_branch" "this" {
+  name    = var.branch.name
+  project = coalesce(local._projects[var.branch.project].id, one(gitlab_project.this[*].id), var.branch.project)
+  ref     = var.branch.ref
+}
+
+resource "gitlab_branch" "branches" {
   for_each = {
     for branch in var.branches : branch.name => branch
     if length(var.branches) > 0
@@ -661,7 +841,35 @@ resource "gitlab_branch" "this" {
   ref     = each.value.ref
 }
 
-resource "gitlab_repository_file" "this" {
+resource "gitlab_repository_file" "file" {
+  count = var.repository_file != null ? 1 : 0
+
+  project               = tostring(coalesce(local._projects[var.repository_file.project].id, one(gitlab_project.this[*].id), var.repository_file.project))
+  file_path             = var.repository_file.file_path
+  branch                = var.repository_file.branch
+  content               = var.repository_file.content
+  author_email          = try(var.repository_file.author_email, data.gitlab_current_user.this.public_email)
+  author_name           = try(var.repository_file.author_name, data.gitlab_current_user.this.name)
+  commit_message        = var.repository_file.commit_message
+  create_commit_message = var.repository_file.create_commit_message
+  delete_commit_message = var.repository_file.delete_commit_message
+  encoding              = var.repository_file.encoding
+  execute_filemode      = var.repository_file.execute_filemode
+  overwrite_on_create   = var.repository_file.overwrite_on_create
+  start_branch          = var.repository_file.start_branch
+  dynamic "timeouts" {
+    for_each = var.repository_file.timeouts != null ? var.repository_file.timeouts : {}
+    iterator = item
+    content {
+      create = try(item.value.create, null)
+      delete = try(item.value.delete, null)
+      update = try(item.value.update, null)
+    }
+  }
+  update_commit_message = var.repository_file.update_commit_message
+}
+
+resource "gitlab_repository_file" "files" {
   for_each = {
     for file in var.repository_files : file.file_path => file
     if length(var.repository_files) > 0
