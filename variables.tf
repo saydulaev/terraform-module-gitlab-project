@@ -121,8 +121,25 @@ variable "project" {
   default = null
 }
 
+variable "access_token" {
+  description = "Gitlab project access token."
+  type = object({
+    name    = string // The name of the project access token.
+    project = string // The name of the project
+    // project = optional(string) // The id of project
+    scopes       = set(string)      // The scopes of the project access token.
+    access_level = optional(string) // The access level for the project access token.
+    expires_at   = optional(string) // When the token will expire, YYYY-MM-DD format. Is automatically set when rotation_configuration is used.
+    rotation_configuration = optional(object({
+      expiration_days    = number // The duration (in days) the new token should be valid for.
+      rotate_before_days = number // The duration (in days) before the expiration when the token should be rotated.
+    }))                           //  The configuration for when to rotate a token automatically. 
+  })
+  default = null
+}
+
 variable "access_tokens" {
-  description = "Resource allows to manage the lifecycle of a project access token."
+  description = "Resource allows to manage the lifecycle of a project access tokens."
   type = list(object({
     name         = string           // The name of the project access token.
     project      = string           // The ID or full path of the project
@@ -137,8 +154,25 @@ variable "access_tokens" {
   default = []
 }
 
-variable "approval_rules" {
+variable "approval_rule" {
   description = "Manage the lifecycle of a project-level approval rule."
+  type = object({
+    name                                                  = string
+    project                                               = string
+    approvals_required                                    = number
+    project_id                                            = optional(string)
+    applies_to_all_protected_branches                     = optional(bool, false)       // Whether the rule is applied to all protected branches. If set to 'true', the value of protected_branch_ids is ignored
+    disable_importing_default_any_approver_rule_on_create = optional(bool)              // When this flag is set, the default any_approver rule will not be imported if present.
+    group_ids                                             = optional(set(string))       // A list of group IDs whose members can approve of the merge request.
+    protected_branch_ids                                  = optional(set(number))       // A list of protected branch IDs (not branch names) for which the rule applies.
+    rule_type                                             = optional(string, "regular") // The type of rule.
+    user_ids                                              = optional(set(string))       // A list of specific User IDs to add to the list of approvers.
+  })
+  default = null
+}
+
+variable "approval_rules" {
+  description = "Manage the lifecycle of a project-level approval rules."
   type = list(object({
     name                                                  = string
     project                                               = string
@@ -153,6 +187,18 @@ variable "approval_rules" {
   default = []
 }
 
+variable "badge" {
+  description = "Manage the lifecycle of project badge"
+  type = object({
+    project    = string           // The name of the project to add the badge to.
+    project_id = optional(string) // The id of the project to add the badge to.
+    image_url  = string           // The image url which will be presented on project overview.
+    link_url   = string           // The url linked with the badge.
+    name       = optional(string) // The name of the badge.
+  })
+  default = null
+}
+
 variable "badges" {
   description = "Manage the lifecycle of project badges"
   type = list(object({
@@ -162,6 +208,18 @@ variable "badges" {
     name      = optional(string) // The name of the badge.
   }))
   default = []
+}
+
+variable "compliance_framework" {
+  description = "Manage the lifecycle of a compliance framework on a project."
+  type = object({
+    compliance_framework_id = string           // Globally unique ID of the compliance framework to assign to the project.
+    project                 = string           // The name of the project to change the compliance framework of.
+    project_id              = optional(string) // The ID of the project to change the compliance framework of.
+    namespace_path          = optional(string)
+    name                    = optional(string)
+  })
+  default = null
 }
 
 variable "compliance_frameworks" {
@@ -175,6 +233,17 @@ variable "compliance_frameworks" {
   default = []
 }
 
+variable "custom_attribute" {
+  description = "Manage custom attribute for a project."
+  type = object({
+    project    = string           // The name of the project.
+    project_id = optional(string) // The id of the project.
+    key        = string           // Key for the Custom Attribute.
+    value      = string           // Value for the Custom Attribute.
+  })
+  default = null
+}
+
 variable "custom_attributes" {
   description = "Manage custom attributes for a project."
   type = list(object({
@@ -185,8 +254,20 @@ variable "custom_attributes" {
   default = []
 }
 
-variable "environments" {
+variable "environment" {
   description = "Manage the lifecycle of an environment in a project."
+  type = object({
+    name                = string           // The name of the environment.
+    project             = string           // The name of full path of the project to environment is created for.
+    project_id          = optional(string) // The ID of the project to environment is created for.
+    external_url        = optional(string) // Place to link to for this environment.
+    stop_before_destroy = optional(string) // Determines whether the environment is attempted to be stopped before the environment is deleted.
+  })
+  default = null
+}
+
+variable "environments" {
+  description = "Manage the lifecycle of environments in a project."
   type = list(object({
     name                = string           // The name of the environment.
     project             = string           // The ID or full path of the project to environment is created for.
@@ -207,8 +288,34 @@ variable "freeze_period" {
   default = null
 }
 
-variable "hooks" {
+variable "hook" {
   description = "Manage the lifecycle of a project hook."
+  type = object({
+    project                    = string           // The name of the project to add the hook to.
+    project_id                 = optional(string) // The id of the project to add the hook to.
+    url                        = string           // The url of the hook to invoke.
+    confidential_issues_events = optional(bool)   // Invoke the hook for confidential issues events.
+    confidential_note_events   = optional(bool)   // Invoke the hook for confidential notes events.
+    custom_webhook_template    = optional(bool)   // Set a custom webhook template.
+    deployment_events          = optional(bool)   // Invoke the hook for deployment events.
+    enable_ssl_verification    = optional(bool)   // Enable ssl verification when invoking the hook.
+    issues_events              = optional(bool)   //Invoke the hook for issues events.
+    job_events                 = optional(bool)   //  Invoke the hook for job events.
+    merge_requests_events      = optional(bool)   // Invoke the hook for merge requests.
+    note_events                = optional(bool)   //  Invoke the hook for notes events.
+    pipeline_events            = optional(bool)   // Invoke the hook for pipeline events.
+    push_events                = optional(bool)   // Invoke the hook for push events.
+    push_events_branch_filter  = optional(string) // Invoke the hook for push events on matching branches only.
+    releases_events            = optional(bool)   // Invoke the hook for releases events.
+    tag_push_events            = optional(bool)   // Invoke the hook for tag push events.
+    token                      = optional(string) // A token to present when invoking the hook. The token is not available for imported resources.
+    wiki_page_events           = optional(bool)   // Invoke the hook for wiki page events.
+  })
+  default = null
+}
+
+variable "hooks" {
+  description = "Manage the lifecycle of a project hooks."
   type = list(object({
     project                    = string           // The name or id of the project to add the hook to.
     url                        = string           // The url of the hook to invoke.
@@ -232,8 +339,22 @@ variable "hooks" {
   default = []
 }
 
-variable "milestones" {
+variable "milestone" {
   description = "Manage the lifecycle of a project milestone."
+  type = object({
+    project     = string           // The URL-encoded path of the project owned by the authenticated user.
+    project_id  = optional(string) // The ID  of the project owned by the authenticated user.
+    title       = string           // The title of a milestone.
+    description = optional(string) // The description of the milestone.
+    due_date    = optional(string) // The due date of the milestone. Date time string in the format YYYY-MM-DD
+    start_date  = optional(string) // The start date of the milestone. Date time string in the format YYYY-MM-DD
+    state       = optional(string) // The state of the milestone.
+  })
+  default = null
+}
+
+variable "milestones" {
+  description = "Manage the lifecycle of a project milestones."
   type = list(object({
     project     = string           // The ID or URL-encoded path of the project owned by the authenticated user.
     title       = string           // The title of a milestone.
@@ -243,6 +364,33 @@ variable "milestones" {
     state       = optional(string) // The state of the milestone.
   }))
   default = []
+}
+
+variable "issue" {
+  description = "Manage the lifecycle of an issue within a project."
+  type = object({
+    project                                 = string                // The name of the project.
+    project_id                              = optional(string)      // The  ID of the project.
+    title                                   = string                // The title of the issue.
+    assignee_ids                            = optional(set(number)) // The IDs of the users to assign the issue to.
+    confidential                            = optional(bool)        // Set an issue to be confidential.
+    created_at                              = optional(string)      // When the issue was created. Date time string, ISO 8601 formatted, for example 2016-03-11T03:45:40Z.
+    delete_on_destroy                       = optional(bool)        // Whether the issue is deleted instead of closed during destroy.
+    description                             = optional(string)      // The description of an issue. Limited to 1,048,576 characters.
+    discussion_locked                       = optional(bool)        // Whether the issue is locked for discussions or not.
+    discussion_to_resolve                   = optional(string)      // The ID of a discussion to resolve.
+    due_date                                = optional(string)      // The due date. Date time string in the format YYYY-MM-DD
+    epic_issue_id                           = optional(number)      // The ID of the epic issue.
+    iid                                     = optional(number)      // The internal ID of the project's issue.
+    issue_type                              = optional(string)      // The type of issue. Valid values are: issue, incident, test_case.
+    labels                                  = optional(set(string)) // The labels of an issue.
+    merge_request_to_resolve_discussions_of = optional(number)      //  The IID of a merge request in which to resolve all issues. 
+    milestone_id                            = optional(number)      // The global ID of a milestone to assign issue. 
+    state                                   = optional(string)      // The state of the issue. Valid values are: opened, closed.
+    updated_at                              = optional(string)      // When the issue was updated. Date time string, ISO 8601 formatted, for example 2016-03-11T03:45:40Z.
+    weight                                  = optional(number)      // The weight of the issue. Valid values are greater than or equal to 0.
+  })
+  default = null
 }
 
 variable "issues" {
@@ -271,8 +419,27 @@ variable "issues" {
   default = []
 }
 
-variable "issue_boards" {
+variable "issue_board" {
   description = "Manage the lifecycle of a Project Issue Board."
+  type = object({
+    name        = string                // The name of the board.
+    project     = string                // The ID or full path of the project maintained by the authenticated user.
+    assignee_id = optional(number)      // The assignee the board should be scoped to. Requires a GitLab EE license.
+    labels      = optional(set(string)) // The list of label names which the board should be scoped to. Requires a GitLab EE license.
+    lists = optional(list(object({
+      assignee_id  = optional(number) // The assignee the board should be scoped to. Requires a GitLab EE license.
+      iteration_id = optional(number) // The ID of the iteration the list should be scoped to. Requires a GitLab EE license.
+      label_id     = optional(string) // The ID of the label the list should be scoped to. Requires a GitLab EE license.
+      milestone_id = optional(number) // The ID of the milestone the list should be scoped to. Requires a GitLab EE license.
+    })))                              // The list of issue board lists
+    milestone_id = optional(number)   // The milestone the board should be scoped to. Requires a GitLab EE license.
+    weight       = optional(number)   // The weight range from 0 to 9, to which the board should be scoped to. Requires a GitLab EE license.
+  })
+  default = null
+}
+
+variable "issue_boards" {
+  description = "Manage the lifecycle of a Project Issue Boards."
   type = list(object({
     name        = string                // The name of the board.
     project     = string                // The ID or full path of the project maintained by the authenticated user.
@@ -290,6 +457,16 @@ variable "issue_boards" {
   default = []
 }
 
+variable "job_token_scope" {
+  description = "Manage the CI/CD Job Token scope in a project."
+  type = object({
+    project           = string           // The full path of the project.
+    project_id        = optional(string) // The ID of the project.
+    target_project_id = string           // The ID of the project that is in the CI/CD job token inbound allowlist.
+  })
+  default = null
+}
+
 variable "job_token_scopes" {
   description = "Manage the CI/CD Job Token scope in a project."
   type = list(object({
@@ -299,8 +476,20 @@ variable "job_token_scopes" {
   default = []
 }
 
-variable "labels" {
+variable "label" {
   description = "Manage the lifecycle of a project label."
+  type = object({
+    color       = string           // The color of the label given in 6-digit hex notation with leading '#' sign (e.g. #FFAABB) or one of the CSS color names.
+    name        = string           // The name of the label.
+    project     = string           // The name of the project to add the label to.
+    project_id  = string           // The id of the project to add the label to.
+    description = optional(string) // The description of the label.
+  })
+  default = null
+}
+
+variable "labels" {
+  description = "Manage the lifecycle of a project labels."
   type = list(object({
     color       = string           // The color of the label given in 6-digit hex notation with leading '#' sign (e.g. #FFAABB) or one of the CSS color names.
     name        = string           // The name of the label.
@@ -354,6 +543,17 @@ variable "level_notifications" {
 
 variable "membership" {
   description = "Manage the lifecycle of a users project membership."
+  type = object({
+    access_level = string           // The access level for the member. Valid values are: no one, minimal, guest, reporter, developer, maintainer, owner, master
+    project      = string           // The ID or URL-encoded path of the project.
+    user_id      = string           // The id of the user.
+    expires_at   = optional(string) // Expiration date for the project membership. Format: YYYY-MM-DD
+  })
+  default = null
+}
+
+variable "memberships" {
+  description = "Manage the lifecycle of a users projects membership."
   type = list(object({
     access_level = string           // The access level for the member. Valid values are: no one, minimal, guest, reporter, developer, maintainer, owner, master
     project      = string           // The ID or URL-encoded path of the project.
@@ -375,8 +575,31 @@ variable "mirror" {
   default = null
 }
 
-variable "protected_environments" {
+variable "protected_environment" {
   description = "Manage the lifecycle of a protected environment in a project."
+  type = object({
+    environment = string // The name of the environment.
+    project     = string // The ID or full path of the project which the protected environment is created against.
+    approval_rules = optional(list(object({
+      access_level           = optional(string)    // Levels of access allowed to approve a deployment to this protected environment. Valid values are developer, maintainer.
+      group_id               = optional(string)    // The ID of the group allowed to approve a deployment to this protected environment.
+      group_inheritance_type = optional(number, 0) // Group inheritance allows deploy access levels to take inherited group membership into account. Valid values are 0, 1. 0 => Direct group membership only, 1 => All inherited groups. Default: 0
+      required_approvals     = optional(number)    // The number of approval required to allow deployment to this protected environment. This is mutually exclusive with user_id.
+      user_id                = optional(number)    // The ID of the user allowed to approve a deployment to this protected environment. The user must be a member of the project. This is mutually exclusive with group_id and required_approvals.
+    })))                                           // Array of approval rules to deploy, with each described by a hash.
+    deploy_access_levels = optional(set(object({
+      access_level           = optional(string)    // Levels of access required to deploy to this protected environment. Valid values are developer, maintainer.
+      group_id               = optional(number)    // The ID of the group allowed to deploy to this protected environment. The project must be shared with the group.
+      group_inheritance_type = optional(number, 0) // Group inheritance allows deploy access levels to take inherited group membership into account. Valid values are 0, 1. 0 => Direct group membership only, 1 => All inherited groups. Default: 0
+      user_id                = optional(number)    // The ID of the user allowed to deploy to this protected environment. The user must be a member of the project.
+    })))                                           // Array of access levels allowed to deploy, with each described by a hash.
+    required_approval_count = optional(number)     // The number of approvals required to deploy to this environment.
+  })
+  default = null
+}
+
+variable "protected_environments" {
+  description = "Manage the lifecycle of a protected environments in a project."
   type = list(object({
     environment = string // The name of the environment.
     project     = string // The ID or full path of the project which the protected environment is created against.
@@ -398,13 +621,32 @@ variable "protected_environments" {
   default = []
 }
 
-variable "runners" {
+variable "runner" {
   description = "Enable a runner in a project."
+  type = object({
+    project   = string // The ID or URL-encoded path of the project owned by the authenticated user.
+    runner_id = number // The ID of a runner to enable for the project.
+  })
+  default = null
+}
+
+variable "runners" {
+  description = "Enable a runners in a project."
   type = list(object({
     project   = string // The ID or URL-encoded path of the project owned by the authenticated user.
     runner_id = number // The ID of a runner to enable for the project.
   }))
   default = []
+}
+
+variable "share_group" {
+  description = "Manage the lifecycle of project shared with a group."
+  type = object({
+    group_id     = string           // The id of the group.
+    project      = string           // The ID or URL-encoded path of the project.
+    group_access = optional(string) // The access level to grant the group for the project. Valid values are: no one, minimal, guest, reporter, developer, maintainer, owner, master
+  })
+  default = null
 }
 
 variable "share_groups" {
@@ -417,8 +659,25 @@ variable "share_groups" {
   default = []
 }
 
-variable "tags" {
+variable "tag" {
   description = "Manage the lifecycle of a tag in a project."
+  type = object({
+    name                = string                // The name of a tag.
+    project             = string                // The ID or URL-encoded path of the project owned by the authenticated user.
+    ref                 = string                // Create tag using commit SHA, another tag name, or branch name. This attribute is not available for imported resources.
+    message             = optional(string)      // The message of the annotated tag.
+    protected           = optional(bool, false) // Define tag protection
+    create_access_level = optional(string)      // Access levels which are allowed to create. Valid values are: no one, developer, maintainer
+    allowed_to_create = optional(list(object({
+      group_id = optional(string)
+      user_id  = optional(string)
+    })), [])
+  })
+  default = null
+}
+
+variable "tags" {
+  description = "Manage the lifecycle of a tags in a project."
   type = list(object({
     name                = string                // The name of a tag.
     project             = string                // The ID or URL-encoded path of the project owned by the authenticated user.
@@ -434,11 +693,29 @@ variable "tags" {
   default = []
 }
 
-variable "variables" {
+variable "variable" {
   description = "Manage the lifecycle of a CI/CD variable for a project."
+  type = object({
+    key               = string                      // The name of the variable.
+    project           = optional(string)            // The name of the project.
+    project_id        = optional(string)            // The id of the project.
+    value             = string                      // The value of the variable.
+    description       = optional(string)            // The description of the variable.
+    environment_scope = optional(string)            // The environment scope of the variable. Defaults to all environment (*). Note that in Community Editions of Gitlab, values other than * will cause inconsistent plans.
+    masked            = optional(bool, false)       //  If set to true, the value of the variable will be hidden in job logs. The value must meet the masking requirements.
+    protected         = optional(bool, false)       // If set to true, the variable will be passed only to pipelines running on protected branches and tags.
+    raw               = optional(bool, false)       // Whether the variable is treated as a raw string. When true, variables in the value are not expanded.
+    variable_type     = optional(string, "env_var") // The type of a variable. Valid values are: env_var, file
+  })
+  default = null
+}
+
+variable "variables" {
+  description = "Manage the lifecycle of a CI/CD variables for a project."
   type = list(object({
     key               = string                      // The name of the variable.
-    project           = string                      // The name or id of the project.
+    project           = optional(string)            // The name of the project.
+    project_id        = optional(string)            // The id of the project.
     value             = string                      // The value of the variable.
     description       = optional(string)            // The description of the variable.
     environment_scope = optional(string)            // The environment scope of the variable. Defaults to all environment (*). Note that in Community Editions of Gitlab, values other than * will cause inconsistent plans.
@@ -450,8 +727,19 @@ variable "variables" {
   default = []
 }
 
-variable "deploy_keys" {
+variable "deploy_key" {
   description = "Configiure the lifecycle of a deploy key."
+  type = object({
+    key      = string                // The public ssh key body.
+    project  = string                // The name or id of the project to add the deploy key to.
+    title    = string                // A title to describe the deploy key with.
+    can_push = optional(bool, false) // Allow this deploy key to be used to push changes to the project. 
+  })
+  default = null
+}
+
+variable "deploy_keys" {
+  description = "Configiure the lifecycle of a deploy keys."
   type = list(object({
     key      = string                // The public ssh key body.
     project  = string                // The name or id of the project to add the deploy key to.
@@ -459,6 +747,19 @@ variable "deploy_keys" {
     can_push = optional(bool, false) // Allow this deploy key to be used to push changes to the project. 
   }))
   default = []
+}
+
+variable "deploy_token" {
+  description = "Set configuration of the lifecycle of group and project deploy tokens."
+  type = object({
+    name       = string           // A name to describe the deploy token with.
+    scopes     = set(string)      // Valid values: read_repository, read_registry, read_package_registry, write_registry, write_package_registry.
+    expires_at = optional(string) // Time the token will expire it, RFC3339 format. Will not expire per default.
+    group      = optional(string) // The name or id of the group to add the deploy token to.
+    project    = optional(string) // The name or id of the project to add the deploy token to.
+    username   = optional(string) // A username for the deploy token. Default is gitlab+deploy-token-{n}.
+  })
+  default = null
 }
 
 variable "deploy_tokens" {
@@ -476,6 +777,24 @@ variable "deploy_tokens" {
 
 variable "pipeline_schedule" {
   description = "Configure the lifecycle of a scheduled pipeline."
+  type = object({
+    cron           = string           // The cron (e.g. 0 1 * * *).
+    description    = string           // The description of the pipeline schedule.
+    project        = string           // The name or id of the project to add the schedule to.
+    ref            = string           // The branch/tag name to be triggered.
+    active         = optional(bool)   // The activation of pipeline schedule. If false is set, the pipeline schedule will deactivated initially.
+    cron_timezone  = optional(string) // The timezone.
+    take_ownership = optional(bool)   // When set to true, the user represented by the token running Terraform will take ownership of the scheduled pipeline prior to editing it.
+    variable = optional(list(object({
+      key   = string // Name of the variable.
+      value = string // Value of the variable.
+    })))
+  })
+  default = null
+}
+
+variable "pipeline_schedules" {
+  description = "Configure the lifecycle of a scheduled pipelines."
   type = list(object({
     cron           = string           // The cron (e.g. 0 1 * * *).
     description    = string           // The description of the pipeline schedule.
@@ -505,6 +824,15 @@ variable "pages_domain" {
   default = null
 }
 
+variable "branch" {
+  description = "Gitlab project branch"
+  type = object({
+    name    = string
+    project = string
+    ref     = string
+  })
+  default = null
+}
 
 variable "branches" {
   description = "Gitlab project branches"
@@ -516,6 +844,14 @@ variable "branches" {
   default = []
 }
 
+variable "pipeline_trigger" {
+  description = "Gitlab project pipeline trigger"
+  type = object({
+    project     = string
+    description = string
+  })
+  default = null
+}
 
 variable "pipeline_triggers" {
   description = "Gitlab project pipeline triggers"
@@ -524,6 +860,19 @@ variable "pipeline_triggers" {
     description = string
   }))
   default = []
+}
+
+variable "release_link" {
+  description = "Gitlab project release link"
+  type = object({
+    name      = string           // The name of the link. Link names must be unique within the release.
+    project   = string           // The ID or URL-encoded path of the project.
+    tag_name  = string           // The tag associated with the Release.
+    url       = string           // The URL of the link. Link URLs must be unique within the release.
+    filepath  = optional(string) // Relative path for a Direct Asset link.
+    link_type = optional(string) //  The type of the link. Valid values are other, runbook, image, package. Defaults to other.
+  })
+  default = null
 }
 
 variable "release_links" {
@@ -537,6 +886,32 @@ variable "release_links" {
     link_type = optional(string) //  The type of the link. Valid values are other, runbook, image, package. Defaults to other.
   }))
   default = []
+}
+
+variable "repository_file" {
+  description = "Gitlab project repo file"
+  type = object({
+    project               = string                     // The name or ID of the project.
+    file_path             = string                     // The full path of the file. It must be relative to the root of the project without a leading slash / or ./
+    branch                = string                     // Name of the branch to which to commit to.
+    content               = string                     // File content.
+    author_email          = optional(string)           // Email of the commit author.
+    author_name           = optional(string)           // Name of the commit author.
+    commit_message        = optional(string)           // Commit message.
+    create_commit_message = optional(string)           // Create commit message.
+    delete_commit_message = optional(string)           // Delete Commit message.
+    encoding              = optional(string, "base64") // The file content encoding.
+    execute_filemode      = optional(bool)             // Enables or disables the execute flag on the file.
+    overwrite_on_create   = optional(bool, false)      // Enable overwriting existing files
+    start_branch          = optional(string)           // Name of the branch to start the new commit from.
+    timeouts = optional(object({
+      create = optional(string)
+      delete = optional(string)
+      update = optional(string)
+    }))
+    update_commit_message = optional(string) // Update commit message.
+  })
+  default = null
 }
 
 variable "repository_files" {
@@ -725,7 +1100,8 @@ variable "integration_pipelines_email" {
 variable "integration_slack" {
   description = "Gitlab project Slack integration"
   type = object({
-    project                      = string                      // ID of the project you want to activate integration on.
+    project                      = optional(string)            // Name of the project you want to activate integration on.
+    project_id                   = optional(string)            // ID of the project you want to activate integration on.
     webhook                      = string                      // Webhook URL
     branches_to_be_notified      = optional(string, "default") // Branches to send notifications for.
     confidential_issue_channel   = optional(string)            // The name of the channel to receive confidential issue events notifications.
